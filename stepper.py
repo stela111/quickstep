@@ -3,7 +3,12 @@ import sys
 import math
 from fifo import Fifo
 
-axes = 1
+gpio0 = 0x44E07000
+gpio1 = 0x4804C000
+gpio2 = 0x481AC000
+gpio3 = 0x481AE000
+
+axes = ((gpio0, 27, gpio1, 14),)
 
 def init(pru_bin):
   pypruss.modprobe(1024)
@@ -16,11 +21,13 @@ def init(pru_bin):
   pypruss.open(0)
   pypruss.pruintc_init()
 
-  axes_init = []
-  for axis in range(axes):
-    axes_init += [0x44E07194, 1 << (27+axis), 0, 0]
+  pru_init = [ddr_addr, len(axes)]
+  for step_addr, step_pin, dir_addr, dir_pin in axes:
+    pru_init += [step_addr+0x194, 1 << step_pin,
+                  dir_addr+0x194, 1 << dir_pin,
+                  0, 0]
 
-  pypruss.pru_write_memory(0,0,[ddr_addr, axes]+axes_init)
+  pypruss.pru_write_memory(0,0,pru_init)
   pypruss.exec_program(0, pru_bin)
   return fifo
 
@@ -36,6 +43,12 @@ class Stepper:
     return int(speed_diff**2/(2*self.a*acc))
 
   def move(self, steps, speed, acc, endspeed = 0):
+    tf = 2 # timesteps must be at least 2*steps
+    timesteps = abs(steps*tf)
+
+    if not self.speed == 0 and steps*self.dir < 0:
+      print 'Cannot change direction'
+      return
     if self.speed > speed:
       print 'Cannot start with deceleration'
       return
@@ -43,16 +56,16 @@ class Stepper:
       print 'Cannot end with acceleration'
       return
 
-    tf = 2 # timesteps must be at least 2*steps
-
     cut_acc_steps = tf*self.acc_steps(self.speed, acc)
     cut_dec_steps = tf*self.acc_steps(endspeed, acc)
     acc_steps = tf*self.acc_steps(speed, acc)
     dec_steps = acc_steps - cut_dec_steps
     acc_steps -= cut_acc_steps
 
-    acc_meets_dec_steps = (steps+cut_acc_steps+cut_dec_steps)/2-cut_acc_steps
-    acc_meets_dec_steps *= tf
+    acc_meets_dec_steps = (timesteps+cut_acc_steps+cut_dec_steps)/2-cut_acc_steps
+    if acc_meets_dec_steps < 0 or acc_meets_dec_steps > timesteps:
+      print 'Specified velocity change not possible with given acceleration'
+      return
 
     if self.speed == 0:
       c = int(round(0.676*self.f*math.sqrt(2*self.a/acc/tf)*self.cscale))
@@ -60,24 +73,26 @@ class Stepper:
       c = int(round(self.a*self.f/self.speed/tf*self.cscale))
 
     if acc_meets_dec_steps < acc_steps:
-      self.fifo.write([steps*tf, c, cut_acc_steps, 
-        acc_meets_dec_steps, steps-acc_meets_dec_steps,
-        -steps+acc_meets_dec_steps-cut_dec_steps, 
+      self.fifo.write([timesteps, c, cut_acc_steps, 
+        acc_meets_dec_steps, timesteps-acc_meets_dec_steps,
+        -timesteps+acc_meets_dec_steps-cut_dec_steps, 
         steps], 'l')
     else:
-      self.fifo.write([steps*tf, c, cut_acc_steps, acc_steps, 
+      self.fifo.write([timesteps, c, cut_acc_steps, acc_steps, 
         dec_steps, -dec_steps-cut_dec_steps, steps],'l')
 
     self.speed = endspeed
+    self.dir = 1 if steps > 0 else -1
 
 #cmd = [float(arg) for arg in sys.argv[1:8]]
 
 fifo = init('./stepper.bin')
 
 stepper = Stepper(fifo)
-stepper.move(200*32, 10, 25, 5)
-stepper.move(200*32, 5, 25, 5)
-stepper.move(200*32, 20, 50, 0)
+stepper.move(200*16, 10, 25, 2)
+stepper.move(100*16, 2, 25, 0)
+stepper.move(-200*16, 50, 200, 5)
+stepper.move(-100*16, 5, 50, 0)
 fifo.write([0]*7)
 
 olda = fifo.front()

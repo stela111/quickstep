@@ -10,8 +10,10 @@
 .ends
 
 .struct AxisDefs
-  .u32 gpio_addr
-  .u32 pin_mask
+  .u32 step_addr
+  .u32 step_pin
+  .u32 dir_addr
+  .u32 dir_pin
   .u32 steps
   .u32 err
 .ends
@@ -36,13 +38,8 @@
 .assign InitDef, r8, r9, Init
 .assign FifoDefs, r10, r11, Fifo
 .assign CommandDefs, r12, r17, Command
-.assign AxisDefs, r20, r23, Axis
-#define cur_axis r24
-
-#define GPIO0 0x44E07000
-#define GPIO_CLEARDATAOUT 	0x190
-#define GPIO_SETDATAOUT 	0x194
-#define STEP (1<<27)
+.assign AxisDefs, r20, r25, Axis
+#define cur_axis r26
 
 START:
   // Load setup from ram
@@ -123,8 +120,21 @@ init_axes:
   mov cur_axis, 0
   mov tmp, SIZE(Init)
 init_axes_loop:
+  // Fetch axis definition
   lbbo Axis, tmp, 0, SIZE(Axis)
+
+  // Read step number from fifo
   fifo_get Init.fifo_addr, Axis.steps, SIZE(Axis.steps), tmp2
+
+  // Set dir pin, based on steps sign
+  // steps = abs(steps)
+  mov tmp2, Axis.dir_addr
+  qbbc forwards, Axis.steps, 31
+  not Axis.steps, Axis.steps
+  add Axis.steps, Axis.steps, 1
+  xor tmp2, tmp2, 4
+forwards:
+  sbbo Axis.dir_pin, tmp2, 0, 4
 
   // We will toggle output, therefore double steps
   lsl Axis.steps, Axis.steps, 1
@@ -150,10 +160,10 @@ bresenham_axis:
   qbbc no_step, Axis.err, 31 // step only if signed err < 0
 
   // toggle step
-  sbbo Axis.pin_mask, Axis.gpio_addr, 0, 4
+  sbbo Axis.step_pin, Axis.step_addr, 0, 4
 
   // Toggle set/clear bit
-  xor Axis.gpio_addr, Axis.gpio_addr, 4
+  xor Axis.step_addr, Axis.step_addr, 4
 
   add Axis.err, Axis.err, Command.timesteps
 no_step:

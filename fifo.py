@@ -37,3 +37,6 @@ class Fifo:
     return struct.unpack('L',
       self.ddr_mem[self.ddr_start:self.ddr_start+4])[0]
 
+  def wait(self):
+    while self.front() != self.back:
+      pass

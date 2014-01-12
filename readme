@@ -1,5 +1,9 @@
-This is a hack to drive a stepper motor with acceleration ramps from a BeagleBone using the PRU for real time control.
+This is an early prototype for driving multiple stepper motors with acceleration ramps from a BeagleBone using the PRU for real time control.
+End goal is to control a delta 3d printer.
 Development by Stefan Langemark and Håkan Langemark. (Mostly Stefan so far...)
+
+This code generates step pulses near 50% duty cycle to avoid problems
+with too short pulses on e.g the drv8825 chip.
 
 Demonstration on youtube: http://youtu.be/YlDHBbKrRtU
 
@@ -9,17 +13,20 @@ Instructions:
 The code depends on PyPRUSS by Elias Bakken (https://bitbucket.org/intelligentagent/pypruss).
 Install and make sure you can run the examples.
 
-This code is setup to drive GPIO0 pin 27 with a positive flank for each step, and pulse width of 1.9 us, which suits standard pololou stepper drivers.
-
 You need to configure the pin as an output using a device tree overlay. I followed this example:
 http://hipstercircuits.com/beaglebone-black-gpio-mux-for-pru-with-device-tree-overlay/
-The output will be on P8-17.
+
+Initial setup drives GPIO0 pin 27 as step for first axis. The output will be on P8-17.
 
 Usage:
-python stepper.py <num steps> <speed> <accel> <decel>
+python stepper.py
 
-For example: 500000 steps at medium acceleration up to 100 rad/s = about 16 revs/s (assuming 200 step/rev motor and 1/32 microstepping)
-python stepper.py 500000 100 500 500
-
-Known bugs:
-Yes. 
+Roadmap:
+- Add support for both directions
+- Verify mult-axis functionality
+...
+- Add support for delta printers (hopefully by replacing linear bresenham with delta dda)
+- Parse g-code
+- Add remaining functionality for 3d-printer (heat, fans, endstops, etc)
+Or
+- Integrate with Replicape 

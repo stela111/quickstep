@@ -24,7 +24,6 @@
   .u32 n
   .u32 acc_steps
   .u32 dec_steps
-  .u32 n_dec
 .ends
 
 #define tmp r0
@@ -37,9 +36,9 @@
 #define steps_left r7
 .assign InitDef, r8, r9, Init
 .assign FifoDefs, r10, r11, Fifo
-.assign CommandDefs, r12, r17, Command
-.assign AxisDefs, r20, r25, Axis
-#define cur_axis r26
+.assign CommandDefs, r12, r16, Command
+.assign AxisDefs, r17, r22, Axis
+#define cur_axis r23
 
 START:
   // Load setup from ram
@@ -53,12 +52,7 @@ START:
   mov rem, 0
 
 NEXT_COMMAND:
-  mov tmp, Command.c // Store current c
   fifo_get Init.fifo_addr, Command, SIZE(Command), tmp2
-  // If new c is 0, reuse last c
-  qbne keep_c, Command.c, 0
-  mov Command.c, tmp
-keep_c:
   call init_axes
   check_end_command
 
@@ -76,6 +70,7 @@ wait:
   sub steps_left, steps_left, 1
   qblt wait, steps_left, 0
 
+  // Debug output
   mov tmp, Init.fifo_addr
   mov tmp2, FIFO_LENGTH
   sbbo Command, tmp, tmp2, SIZE(Command)
@@ -85,9 +80,10 @@ wait:
 // Subroutine
 calc_next_delay:
 
-  // When reached start of dec, set n to n_dec
+  // When reached start of dec, negate n
   qbne no_start_dec, steps_left, Command.dec_steps
-  mov Command.n, Command.n_dec
+  not Command.n, Command.n
+  add Command.n, Command.n, 1
 no_start_dec:
 
   // Calculate new c only if acc or dec

@@ -1,6 +1,9 @@
+#!/usr/bin/env python
+
 import pypruss
 import sys
 import math
+import time
 from fifo import Fifo
 
 gpio0 = 0x44E07000
@@ -31,6 +34,14 @@ def init(pru_bin):
   pypruss.exec_program(0, pru_bin)
   return fifo
 
+def vdiff(v1, v2):
+  """Vector difference""" 
+  return tuple(a-b for a, b in zip(v1, v2))
+
+def vlen(v):
+  """Euclidean vector length"""
+  return sum(float(a)**2 for a in v)**.5
+
 class Stepper:
   def __init__(self, fifo):
     self.fifo = fifo
@@ -38,17 +49,15 @@ class Stepper:
     self.a = 2.0*math.pi/200/32
     self.f = 2e8
     self.speed = 0
+    self.num_axes = len(axes)
 
   def acc_steps(self, speed_diff, acc):
     return int(speed_diff**2/(2*self.a*acc))
 
   def move(self, steps, speed, acc, endspeed = 0):
     tf = 2 # timesteps must be at least 2*steps
-    timesteps = abs(steps*tf)
+    timesteps = vlen(steps)*tf
 
-    if not self.speed == 0 and steps*self.dir < 0:
-      print 'Cannot change direction'
-      return
     if self.speed > speed:
       print 'Cannot start with deceleration'
       return
@@ -73,38 +82,45 @@ class Stepper:
       c = int(round(self.a*self.f/self.speed/tf*self.cscale))
 
     if acc_meets_dec_steps < acc_steps:
-      self.fifo.write([timesteps, c, cut_acc_steps, 
-        acc_meets_dec_steps, timesteps-acc_meets_dec_steps,
-        -timesteps+acc_meets_dec_steps-cut_dec_steps, 
-        steps], 'l')
+      self.fifo.write([timesteps, c, cut_acc_steps, acc_meets_dec_steps,
+        timesteps-acc_meets_dec_steps] + steps, 'l')
     else:
       self.fifo.write([timesteps, c, cut_acc_steps, acc_steps, 
-        dec_steps, -dec_steps-cut_dec_steps, steps],'l')
+        dec_steps] + steps,'l')
 
     self.speed = endspeed
-    self.dir = 1 if steps > 0 else -1
+
+  def stop(self):
+    self.fifo.write([0]*(5+self.num_axes))
 
 #cmd = [float(arg) for arg in sys.argv[1:8]]
 
 fifo = init('./stepper.bin')
 
 stepper = Stepper(fifo)
-stepper.move(200*16, 10, 25, 2)
-stepper.move(100*16, 2, 25, 0)
-stepper.move(-200*16, 50, 200, 5)
-stepper.move(-100*16, 5, 50, 0)
-fifo.write([0]*7)
+
+r = 200*16
+s = 20
+a = 40
+
+ax = len(axes)
+stepper.move([r]*ax, s, a, s/10)
+stepper.move([r/2]*ax, s/10, a, 0)
+stepper.move([-r]*ax, s*2, a*4, s/2)
+stepper.move([-r/2]*ax, s/2, a, 0)
+stepper.stop()
 
 olda = fifo.front()
 print 'front:',olda
 while True:
   a = fifo.front()
   if not olda == a:
-    print fifo.memread(1024, 6)
+    print fifo.memread(1024, 5,'l')
     print 'front:',a
     olda = a
   if a == fifo.back:
     break
+  time.sleep(0.1)
 
 pypruss.wait_for_event(0)
 pypruss.clear_event(0)

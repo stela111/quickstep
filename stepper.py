@@ -11,7 +11,8 @@ gpio1 = 0x4804C000
 gpio2 = 0x481AC000
 gpio3 = 0x481AE000
 
-axes = ((gpio0, 27, gpio1, 14),)
+axes = ((gpio0, 27, gpio1, 14),
+        (gpio1, 15, gpio0, 26))
 
 def init(pru_bin):
   pypruss.modprobe(1024)
@@ -74,6 +75,7 @@ class Stepper:
     acc_meets_dec_steps = (timesteps+cut_acc_steps+cut_dec_steps)/2-cut_acc_steps
     if acc_meets_dec_steps < 0 or acc_meets_dec_steps > timesteps:
       print 'Specified velocity change not possible with given acceleration'
+      print timesteps, acc_meets_dec_steps
       return
 
     if self.speed == 0:
@@ -99,15 +101,17 @@ fifo = init('./stepper.bin')
 
 stepper = Stepper(fifo)
 
-r = 200*16
-s = 20
-a = 40
+r = 200*16/5
+s = 5
+j = 2
+a = 50
 
 ax = len(axes)
-stepper.move([r]*ax, s, a, s/10)
-stepper.move([r/2]*ax, s/10, a, 0)
-stepper.move([-r]*ax, s*2, a*4, s/2)
-stepper.move([-r/2]*ax, s/2, a, 0)
+steps = 20
+for t in range(steps):
+  x = math.sin(t*2*math.pi/steps)
+  y = math.cos(t*2*math.pi/steps)
+  stepper.move([r*x, r*y], s, a, s if t < steps-1 else 0)
 stepper.stop()
 
 olda = fifo.front()

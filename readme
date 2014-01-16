@@ -16,17 +16,22 @@ Install and make sure you can run the examples.
 You need to configure the pin as an output using a device tree overlay. I followed this example:
 http://hipstercircuits.com/beaglebone-black-gpio-mux-for-pru-with-device-tree-overlay/
 
-Initial setup drives GPIO0 pin 27 as step for first axis. The output will be on P8-17.
+Connect two steppers according to this table:
+Pin     Signal
+P8_17   STEP_X
+P8_16   DIR_X
+P8_15   STEP_Y
+P8_14   DIR_Y
 
 Usage:
 python stepper.py
 
 Roadmap:
-- Add support for both directions
-- Verify mult-axis functionality
+- Add support for both directions - Done
+- Implement mult-axis functionality - Done
 ...
 - Add support for delta printers (hopefully by replacing linear bresenham with delta dda)
 - Parse g-code
 - Add remaining functionality for 3d-printer (heat, fans, endstops, etc)
 Or
-- Integrate with Replicape 
+- Integrate with Replicape
